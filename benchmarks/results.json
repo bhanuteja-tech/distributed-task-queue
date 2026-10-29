@@ -1,0 +1,75 @@
+{
+  "environment": {
+    "os": "Windows-11-10.0.26300-SP0",
+    "python": "3.12.13",
+    "timestamp": "2026-10-29T13:41:18.795391+00:00",
+    "cpu_count": "AMD64 Family 25 Model 68 Stepping 1, AuthenticAMD"
+  },
+  "small_worker_config": {
+    "scenario_name": "Small Config (1 worker x 2 concurrency)",
+    "worker_count": 1,
+    "concurrency_per_worker": 2,
+    "total_concurrency": 2,
+    "total_tasks": 50,
+    "submission_duration_seconds": 0.1654,
+    "submission_throughput_tasks_per_sec": 302.34,
+    "submission_latency": {
+      "min": 0.0015,
+      "max": 0.0651,
+      "mean": 0.0033,
+      "p50": 0.0019,
+      "p95": 0.0032,
+      "p99": 0.0651
+    },
+    "completion_duration_seconds": 0.688,
+    "completion_throughput_tasks_per_sec": 72.68,
+    "e2e_completion_latency": {
+      "min": 0.2336,
+      "max": 0.6876,
+      "mean": 0.5019,
+      "p50": 0.5346,
+      "p95": 0.666,
+      "p99": 0.6876
+    },
+    "success_rate_pct": 100.0,
+    "completed_count": 50,
+    "failed_count": 0
+  },
+  "large_worker_config": {
+    "scenario_name": "Large Config (2 workers x 4 concurrency)",
+    "worker_count": 2,
+    "concurrency_per_worker": 4,
+    "total_concurrency": 8,
+    "total_tasks": 50,
+    "submission_duration_seconds": 0.2208,
+    "submission_throughput_tasks_per_sec": 226.42,
+    "submission_latency": {
+      "min": 0.003,
+      "max": 0.0198,
+      "mean": 0.0044,
+      "p50": 0.0039,
+      "p95": 0.0068,
+      "p99": 0.0198
+    },
+    "completion_duration_seconds": 0.9312,
+    "completion_throughput_tasks_per_sec": 53.7,
+    "e2e_completion_latency": {
+      "min": 0.2223,
+      "max": 0.9592,
+      "mean": 0.5037,
+      "p50": 0.4572,
+      "p95": 0.8152,
+      "p99": 0.9592
+    },
+    "success_rate_pct": 100.0,
+    "completed_count": 50,
+    "failed_count": 0
+  },
+  "failure_recovery_test": {
+    "scenario": "Controlled Worker Failure & Recovery",
+    "tasks_submitted": 20,
+    "tasks_reclaimed_by_reaper": 1,
+    "recovery_and_drain_duration_seconds": 4.9071,
+    "final_success_rate_pct": 100.0
+  }
+}

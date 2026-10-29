@@ -1,0 +1,156 @@
+services:
+  # ==============================================================================
+  # Infrastructure: PostgreSQL Database
+  # ==============================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: taskqueue_postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-taskqueue}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d taskqueue"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ==============================================================================
+  # Infrastructure: RabbitMQ Message Broker
+  # ==============================================================================
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: taskqueue_rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+    ports:
+      - "5672:5672"     # AMQP protocol port
+      - "15672:15672"   # Management web UI dashboard
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD-SHELL", "rabbitmq-diagnostics -q check_running"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # ==============================================================================
+  # Infrastructure: Redis Status Cache (Optional)
+  # ==============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: taskqueue_redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ==============================================================================
+  # Database Migration Runner (One-shot before services start)
+  # ==============================================================================
+  migrator:
+    build: .
+    container_name: taskqueue_migrator
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/taskqueue
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  # ==============================================================================
+  # Application: FastAPI REST API
+  # ==============================================================================
+  api:
+    build: .
+    container_name: taskqueue_api
+    command: ["uvicorn", "taskqueue.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=production
+      - LOG_LEVEL=INFO
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/taskqueue
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+      - REDIS_ENABLED=true
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  # ==============================================================================
+  # Application: Asynchronous Worker (Scale with `docker compose up --scale worker=3`)
+  # ==============================================================================
+  worker:
+    build: .
+    command: ["python", "-m", "taskqueue.worker.cli"]
+    environment:
+      - ENVIRONMENT=production
+      - LOG_LEVEL=INFO
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/taskqueue
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+      - REDIS_ENABLED=true
+      - REDIS_URL=redis://redis:6379/0
+      - WORKER_CONCURRENCY=5
+      - WORKER_PREFETCH_COUNT=10
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # ==============================================================================
+  # Application: Transactional Outbox Publisher & Lease Reaper
+  # ==============================================================================
+  outbox_publisher:
+    build: .
+    container_name: taskqueue_outbox_publisher
+    command: ["python", "-m", "taskqueue.outbox_worker.cli"]
+    environment:
+      - ENVIRONMENT=production
+      - LOG_LEVEL=INFO
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/taskqueue
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+      - OUTBOX_POLL_INTERVAL_SECONDS=0.5
+      - OUTBOX_BATCH_SIZE=50
+      - REAPER_INTERVAL_SECONDS=10.0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  rabbitmq_data:
+
